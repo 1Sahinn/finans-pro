@@ -12,15 +12,16 @@ import { getSession, logout, type User } from './auth/users';
 type Page = 'dashboard' | 'stock' | 'cash' | 'currents' | 'sale';
 
 const navItems: { id: Page; label: string; icon: typeof LayoutDashboard }[] = [
-  { id: 'dashboard', label: 'Özet', icon: LayoutDashboard },
-  { id: 'stock', label: 'Stok', icon: Package },
-  { id: 'sale', label: 'Satış', icon: ShoppingCart },
-  { id: 'cash', label: 'Kasa', icon: Wallet },
-  { id: 'currents', label: 'Cariler', icon: Users },
+  { id: 'stock',     label: 'Stok',    icon: Package },
+  { id: 'sale',      label: 'Satış',   icon: ShoppingCart },
+  { id: 'cash',      label: 'Kasa',    icon: Wallet },
+  { id: 'currents',  label: 'Cariler', icon: Users },
+  { id: 'dashboard', label: 'Özet',    icon: LayoutDashboard },
 ];
 
+
 function AppShell({ user, onLogout }: { user: User; onLogout: () => void }) {
-  const [page, setPage] = useState<Page>('dashboard');
+  const [page, setPage] = useState<Page>('stock');
 
   const renderPage = () => {
     switch (page) {

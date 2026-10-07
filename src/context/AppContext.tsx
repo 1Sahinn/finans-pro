@@ -1,21 +1,21 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
-import type { AppState, Product, Transaction, Current, Sale, PaymentMethod } from '../types';
+import type { AppState, Product, Room, Transaction, Current, CurrentLedgerEntry, Sale } from '../types';
 import {
-  loadState,
-  addProduct,
-  updateProduct,
-  deleteProduct,
-  addTransaction,
-  deleteTransaction,
-  addCurrent,
-  updateCurrent,
-  deleteCurrent,
+  loadState, generateId,
+  addRoom, updateRoom, deleteRoom,
+  addProduct, updateProduct, deleteProduct,
+  addTransaction, deleteTransaction,
+  addCurrent, updateCurrent, deleteCurrent,
+  addCurrentLedgerEntry, deleteCurrentLedgerEntry,
   processSale,
-  generateId,
 } from '../data/store';
 
 interface AppContextValue {
   state: AppState;
+  // Rooms
+  addRoom: (r: Omit<Room, 'id' | 'createdAt'>) => void;
+  updateRoom: (id: string, updates: Partial<Room>) => void;
+  deleteRoom: (id: string) => void;
   // Products
   addProduct: (p: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => void;
   updateProduct: (id: string, updates: Partial<Product>) => void;
@@ -27,6 +27,9 @@ interface AppContextValue {
   addCurrent: (c: Omit<Current, 'id' | 'createdAt' | 'updatedAt'>) => void;
   updateCurrent: (id: string, updates: Partial<Current>) => void;
   deleteCurrent: (id: string) => void;
+  // Ledger
+  addCurrentLedgerEntry: (e: Omit<CurrentLedgerEntry, 'id' | 'createdAt' | 'bakiye'>) => void;
+  deleteCurrentLedgerEntry: (id: string) => void;
   // Sales
   processSale: (sale: Omit<Sale, 'id' | 'createdAt'>) => void;
   generateId: () => string;
@@ -37,53 +40,34 @@ const AppContext = createContext<AppContextValue | null>(null);
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AppState>(() => loadState());
 
-  const handleAddProduct = useCallback((p: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => {
-    setState(s => addProduct(s, p));
-  }, []);
+  const handleAddRoom = useCallback((r: Omit<Room, 'id' | 'createdAt'>) => setState(s => addRoom(s, r)), []);
+  const handleUpdateRoom = useCallback((id: string, updates: Partial<Room>) => setState(s => updateRoom(s, id, updates)), []);
+  const handleDeleteRoom = useCallback((id: string) => setState(s => deleteRoom(s, id)), []);
 
-  const handleUpdateProduct = useCallback((id: string, updates: Partial<Product>) => {
-    setState(s => updateProduct(s, id, updates));
-  }, []);
+  const handleAddProduct = useCallback((p: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>) => setState(s => addProduct(s, p)), []);
+  const handleUpdateProduct = useCallback((id: string, updates: Partial<Product>) => setState(s => updateProduct(s, id, updates)), []);
+  const handleDeleteProduct = useCallback((id: string) => setState(s => deleteProduct(s, id)), []);
 
-  const handleDeleteProduct = useCallback((id: string) => {
-    setState(s => deleteProduct(s, id));
-  }, []);
+  const handleAddTransaction = useCallback((t: Omit<Transaction, 'id' | 'createdAt'>) => setState(s => addTransaction(s, t)), []);
+  const handleDeleteTransaction = useCallback((id: string) => setState(s => deleteTransaction(s, id)), []);
 
-  const handleAddTransaction = useCallback((t: Omit<Transaction, 'id' | 'createdAt'>) => {
-    setState(s => addTransaction(s, t));
-  }, []);
+  const handleAddCurrent = useCallback((c: Omit<Current, 'id' | 'createdAt' | 'updatedAt'>) => setState(s => addCurrent(s, c)), []);
+  const handleUpdateCurrent = useCallback((id: string, updates: Partial<Current>) => setState(s => updateCurrent(s, id, updates)), []);
+  const handleDeleteCurrent = useCallback((id: string) => setState(s => deleteCurrent(s, id)), []);
 
-  const handleDeleteTransaction = useCallback((id: string) => {
-    setState(s => deleteTransaction(s, id));
-  }, []);
+  const handleAddLedgerEntry = useCallback((e: Omit<CurrentLedgerEntry, 'id' | 'createdAt' | 'bakiye'>) => setState(s => addCurrentLedgerEntry(s, e)), []);
+  const handleDeleteLedgerEntry = useCallback((id: string) => setState(s => deleteCurrentLedgerEntry(s, id)), []);
 
-  const handleAddCurrent = useCallback((c: Omit<Current, 'id' | 'createdAt' | 'updatedAt'>) => {
-    setState(s => addCurrent(s, c));
-  }, []);
-
-  const handleUpdateCurrent = useCallback((id: string, updates: Partial<Current>) => {
-    setState(s => updateCurrent(s, id, updates));
-  }, []);
-
-  const handleDeleteCurrent = useCallback((id: string) => {
-    setState(s => deleteCurrent(s, id));
-  }, []);
-
-  const handleProcessSale = useCallback((sale: Omit<Sale, 'id' | 'createdAt'>) => {
-    setState(s => processSale(s, sale));
-  }, []);
+  const handleProcessSale = useCallback((sale: Omit<Sale, 'id' | 'createdAt'>) => setState(s => processSale(s, sale)), []);
 
   return (
     <AppContext.Provider value={{
       state,
-      addProduct: handleAddProduct,
-      updateProduct: handleUpdateProduct,
-      deleteProduct: handleDeleteProduct,
-      addTransaction: handleAddTransaction,
-      deleteTransaction: handleDeleteTransaction,
-      addCurrent: handleAddCurrent,
-      updateCurrent: handleUpdateCurrent,
-      deleteCurrent: handleDeleteCurrent,
+      addRoom: handleAddRoom, updateRoom: handleUpdateRoom, deleteRoom: handleDeleteRoom,
+      addProduct: handleAddProduct, updateProduct: handleUpdateProduct, deleteProduct: handleDeleteProduct,
+      addTransaction: handleAddTransaction, deleteTransaction: handleDeleteTransaction,
+      addCurrent: handleAddCurrent, updateCurrent: handleUpdateCurrent, deleteCurrent: handleDeleteCurrent,
+      addCurrentLedgerEntry: handleAddLedgerEntry, deleteCurrentLedgerEntry: handleDeleteLedgerEntry,
       processSale: handleProcessSale,
       generateId,
     }}>

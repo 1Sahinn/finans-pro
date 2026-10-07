@@ -17,19 +17,20 @@ export default function SalePage() {
   const filteredProducts = useMemo(() => {
     const q = search.toLowerCase();
     return state.products.filter(p =>
-      p.stock > 0 &&
-      (p.name.toLowerCase().includes(q) || p.barcode.includes(search))
+      p.name.toLowerCase().includes(q) || p.barkod.includes(search)
     );
   }, [state.products, search]);
 
   function addToCart(productId: string) {
     const product = state.products.find(p => p.id === productId);
-    if (!product || product.stock <= 0) return;
+    if (!product) return;
+
+    // Fiyatı parse et (ör: "260" veya "225-230" → ilk sayıyı al)
+    const parsedPrice = parseFloat(product.fiyat.split('-')[0]) || 0;
 
     setCartItems(prev => {
       const existing = prev.find(i => i.productId === productId);
       if (existing) {
-        if (existing.quantity >= product.stock) return prev; // stok sınırı
         return prev.map(i =>
           i.productId === productId
             ? { ...i, quantity: i.quantity + 1, total: (i.quantity + 1) * i.unitPrice }
@@ -40,9 +41,8 @@ export default function SalePage() {
         productId: product.id,
         productName: product.name,
         quantity: 1,
-        unitPrice: product.salePrice,
-        vatRate: product.vatRate,
-        total: product.salePrice,
+        unitPrice: parsedPrice,
+        total: parsedPrice,
       }];
     });
     setSearch('');
@@ -53,38 +53,29 @@ export default function SalePage() {
   }
 
   function changeQty(productId: string, delta: number) {
-    const product = state.products.find(p => p.id === productId);
     setCartItems(prev => prev.map(i => {
       if (i.productId !== productId) return i;
       const newQty = i.quantity + delta;
       if (newQty <= 0) return i;
-      if (product && newQty > product.stock) return i;
       return { ...i, quantity: newQty, total: newQty * i.unitPrice };
     }));
   }
 
-  function setQtyDirect(productId: string, qty: number) {
-    const product = state.products.find(p => p.id === productId);
-    if (!product) return;
-    const clampedQty = Math.max(1, Math.min(qty, product.stock));
+  function setUnitPrice(productId: string, price: number) {
     setCartItems(prev => prev.map(i =>
       i.productId === productId
-        ? { ...i, quantity: clampedQty, total: clampedQty * i.unitPrice }
+        ? { ...i, unitPrice: price, total: i.quantity * price }
         : i
     ));
   }
 
-  const subtotal = cartItems.reduce((s, i) => s + i.total, 0);
-  const totalVat = cartItems.reduce((s, i) => s + (i.total * i.vatRate / (100 + i.vatRate)), 0);
-  const total = subtotal;
+  const total = cartItems.reduce((s, i) => s + i.total, 0);
 
   function handleSale() {
     if (cartItems.length === 0) return;
     const today = getTodayDate();
     processSale({
       items: cartItems,
-      subtotal,
-      totalVat,
       total,
       paymentMethod,
       currentId: currentId || undefined,
@@ -114,7 +105,7 @@ export default function SalePage() {
           <input
             id="sale-product-search"
             className="search-input"
-            placeholder="Ürün adı veya barkod ile ara ve ekle..."
+            placeholder="Ürün adı veya barkod ile ara..."
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
@@ -146,10 +137,12 @@ export default function SalePage() {
               >
                 <div>
                   <div style={{ fontWeight: 600, fontSize: '0.875rem' }}>{p.name}</div>
-                  <div className="text-dim" style={{ fontSize: '0.7rem' }}>Stok: {p.stock} adet</div>
+                  <div className="text-dim" style={{ fontSize: '0.7rem' }}>
+                    Barkod: {p.barkod || '—'} · {p.tur}
+                  </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontWeight: 700, color: 'var(--color-success)' }}>{formatCurrency(p.salePrice)}</span>
+                  {p.fiyat && <span style={{ fontWeight: 700, color: 'var(--color-success)', fontSize: '0.875rem' }}>{p.fiyat} ₺</span>}
                   <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(99,102,241,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <Plus size={14} className="text-primary" />
                   </div>
@@ -161,7 +154,7 @@ export default function SalePage() {
 
         {search && filteredProducts.length === 0 && (
           <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50, background: 'var(--color-surface-2)', border: '1px solid var(--color-border)', borderRadius: '0 0 14px 14px', padding: '16px', textAlign: 'center' }}>
-            <span className="text-dim" style={{ fontSize: '0.8rem' }}>Stokta ürün bulunamadı</span>
+            <span className="text-dim" style={{ fontSize: '0.8rem' }}>Ürün bulunamadı</span>
           </div>
         )}
       </div>
@@ -171,84 +164,55 @@ export default function SalePage() {
         <div className="empty-state" style={{ padding: '40px 24px' }}>
           <ShoppingCart size={48} />
           <p style={{ marginTop: 12 }}>Sepet boş</p>
-          <span className="text-dim" style={{ fontSize: '0.8rem' }}>Ürün aramak için yukarıdaki alanı kullanın</span>
+          <span className="text-dim" style={{ fontSize: '0.8rem' }}>Yukarıdan ürün arayın</span>
         </div>
       ) : (
         <>
           {/* Sepet Ürünleri */}
           <div style={{ marginBottom: 16 }}>
             <div className="section-title" style={{ marginBottom: 10 }}>SEPET ({cartItems.length} ÜRÜN)</div>
-            {cartItems.map(item => {
-              const product = state.products.find(p => p.id === item.productId);
-              return (
-                <div key={item.productId} className="sale-item">
-                  <div style={{ width: 38, height: 38, borderRadius: 10, background: 'rgba(99,102,241,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <Package size={18} className="text-primary" />
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, fontSize: '0.85rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.productName}</div>
-                    <div className="text-dim" style={{ fontSize: '0.7rem', marginTop: 1 }}>
-                      {formatCurrency(item.unitPrice)} × {item.quantity}
-                      {product && <span style={{ marginLeft: 6 }}>/ Stok: {product.stock}</span>}
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <button
-                      className="btn btn-ghost btn-icon"
-                      id={`cart-minus-${item.productId}`}
-                      style={{ width: 30, height: 30, borderRadius: 8 }}
-                      onClick={() => changeQty(item.productId, -1)}
-                    >
-                      <Minus size={12} />
-                    </button>
+            {cartItems.map(item => (
+              <div key={item.productId} className="sale-item">
+                <div style={{ width: 38, height: 38, borderRadius: 10, background: 'rgba(99,102,241,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Package size={18} className="text-primary" />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: '0.85rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.productName}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
                     <input
                       type="number"
-                      style={{ width: 46, textAlign: 'center', background: 'var(--color-surface-3)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '4px', color: 'var(--color-text)', fontSize: '0.85rem', fontWeight: 700, fontFamily: 'inherit' }}
-                      value={item.quantity}
-                      onChange={e => setQtyDirect(item.productId, parseInt(e.target.value) || 1)}
-                      min={1}
+                      style={{ width: 70, background: 'var(--color-surface-3)', border: '1px solid var(--color-border)', borderRadius: 6, padding: '3px 6px', color: 'var(--color-text)', fontSize: '0.78rem', fontFamily: 'inherit' }}
+                      value={item.unitPrice}
+                      onChange={e => setUnitPrice(item.productId, parseFloat(e.target.value) || 0)}
+                      placeholder="Fiyat"
                     />
-                    <button
-                      className="btn btn-ghost btn-icon"
-                      id={`cart-plus-${item.productId}`}
-                      style={{ width: 30, height: 30, borderRadius: 8 }}
-                      onClick={() => changeQty(item.productId, 1)}
-                    >
-                      <Plus size={12} />
-                    </button>
-                    <div style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--color-success)', minWidth: 80, textAlign: 'right' }}>
-                      {formatCurrency(item.total)}
-                    </div>
-                    <button
-                      className="btn btn-ghost btn-icon"
-                      id={`cart-remove-${item.productId}`}
-                      style={{ width: 28, height: 28, color: 'var(--color-danger)', borderRadius: 8 }}
-                      onClick={() => removeFromCart(item.productId)}
-                    >
-                      <Trash2 size={13} />
-                    </button>
+                    <span className="text-dim" style={{ fontSize: '0.7rem' }}>₺ × {item.quantity}</span>
                   </div>
                 </div>
-              );
-            })}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <button className="btn btn-ghost btn-icon" id={`cart-minus-${item.productId}`} style={{ width: 28, height: 28, borderRadius: 8 }} onClick={() => changeQty(item.productId, -1)}>
+                    <Minus size={12} />
+                  </button>
+                  <span style={{ fontWeight: 700, fontSize: '0.9rem', minWidth: 20, textAlign: 'center' }}>{item.quantity}</span>
+                  <button className="btn btn-ghost btn-icon" id={`cart-plus-${item.productId}`} style={{ width: 28, height: 28, borderRadius: 8 }} onClick={() => changeQty(item.productId, 1)}>
+                    <Plus size={12} />
+                  </button>
+                  <div style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--color-success)', minWidth: 72, textAlign: 'right' }}>
+                    {formatCurrency(item.total)}
+                  </div>
+                  <button className="btn btn-ghost btn-icon" id={`cart-remove-${item.productId}`} style={{ width: 26, height: 26, color: 'var(--color-danger)', borderRadius: 8 }} onClick={() => removeFromCart(item.productId)}>
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
 
-          {/* Özet */}
+          {/* Toplam */}
           <div className="card" style={{ marginBottom: 16 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
-                <span className="text-muted">Ara Toplam</span>
-                <span>{formatCurrency(subtotal - totalVat)}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
-                <span className="text-muted">KDV Dahil</span>
-                <span>{formatCurrency(totalVat)}</span>
-              </div>
-              <div className="divider" style={{ margin: '4px 0' }} />
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontWeight: 700, fontSize: '1rem' }}>Toplam</span>
-                <span style={{ fontWeight: 900, fontSize: '1.4rem', color: 'var(--color-success)' }}>{formatCurrency(total)}</span>
-              </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontWeight: 700, fontSize: '1rem' }}>Toplam</span>
+              <span style={{ fontWeight: 900, fontSize: '1.4rem', color: 'var(--color-success)' }}>{formatCurrency(total)}</span>
             </div>
           </div>
 
@@ -273,12 +237,7 @@ export default function SalePage() {
           {/* Cari Seç */}
           <div className="form-group" style={{ marginBottom: 16 }}>
             <label className="form-label">Cari (Opsiyonel)</label>
-            <select
-              id="sale-current"
-              className="form-select"
-              value={currentId}
-              onChange={e => setCurrentId(e.target.value)}
-            >
+            <select id="sale-current" className="form-select" value={currentId} onChange={e => setCurrentId(e.target.value)}>
               <option value="">Cari seçme</option>
               {state.currents.filter(c => c.type === 'musteri').map(c => (
                 <option key={c.id} value={c.id}>{c.name}</option>
@@ -287,11 +246,7 @@ export default function SalePage() {
           </div>
 
           {/* Satış Yap */}
-          <button
-            id="complete-sale-btn"
-            className="btn btn-success btn-full btn-lg"
-            onClick={handleSale}
-          >
+          <button id="complete-sale-btn" className="btn btn-success btn-full btn-lg" onClick={handleSale}>
             <Receipt size={20} />
             Satışı Tamamla — {formatCurrency(total)}
           </button>
@@ -302,7 +257,7 @@ export default function SalePage() {
       {showSuccess && (
         <div className="toast" style={{ background: 'rgba(16,185,129,0.15)', borderColor: 'rgba(16,185,129,0.3)', color: 'var(--color-success)' }}>
           <CheckCircle size={16} style={{ display: 'inline', marginRight: 6 }} />
-          Satış tamamlandı! Stok güncellendi.
+          Satış tamamlandı!
         </div>
       )}
     </div>

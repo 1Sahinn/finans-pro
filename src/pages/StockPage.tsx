@@ -1,326 +1,323 @@
-import { useState, useMemo } from 'react';
-import {
-  Plus, Search, Package, Edit2, Trash2, X, ChevronUp, ChevronDown, Filter
-} from 'lucide-react';
+import { useState } from 'react';
+import { Plus, Pencil, Trash2, X, ChevronDown, ChevronUp, Home } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { formatCurrency } from '../utils/format';
-import type { Product } from '../types';
+import type { ProductTur, Room, Product } from '../types';
 
-interface ProductFormData {
-  name: string;
-  barcode: string;
-  category: string;
-  purchasePrice: string;
-  salePrice: string;
-  vatRate: string;
-  stock: string;
-  criticalStock: string;
-}
+const TUR_OPTIONS: ProductTur[] = ['Alt', 'Takım', 'Üst', 'Diğer'];
 
-const emptyForm: ProductFormData = {
-  name: '', barcode: '', category: '',
-  purchasePrice: '', salePrice: '', vatRate: '20',
-  stock: '', criticalStock: '5',
+const TUR_COLORS: Record<ProductTur, string> = {
+  'Alt':   'badge-accent',
+  'Takım': 'badge-primary',
+  'Üst':   'badge-success',
+  'Diğer': 'badge-warning',
 };
 
-const CATEGORIES = ['Bilgisayar', 'Aksesuar', 'Mobilya', 'Elektronik', 'Gıda', 'Kırtasiye', 'Diğer'];
+// ===== ODA FORMU =====
+interface RoomFormData { name: string; }
+const defaultRoomForm = (): RoomFormData => ({ name: '' });
+
+// ===== ÜRÜN FORMU =====
+interface ProductFormData {
+  roomId: string; barkod: string; tur: ProductTur; name: string; fiyat: string;
+}
+const defaultProductForm = (roomId = ''): ProductFormData => ({ roomId, barkod: '', tur: 'Alt', name: '', fiyat: '' });
 
 export default function StockPage() {
-  const { state, addProduct, updateProduct, deleteProduct } = useApp();
+  const { state, addRoom, updateRoom, deleteRoom, addProduct, updateProduct, deleteProduct } = useApp();
+  const { rooms, products } = state;
+
+  // Açık/kapalı odalar
+  const [openRooms, setOpenRooms] = useState<Record<string, boolean>>({});
+  const toggleRoom = (id: string) => setOpenRooms(p => ({ ...p, [id]: !p[id] }));
+
+  // Oda modalı
+  const [roomModal, setRoomModal] = useState(false);
+  const [roomForm, setRoomForm] = useState<RoomFormData>(defaultRoomForm());
+  const [editingRoomId, setEditingRoomId] = useState<string | null>(null);
+
+  // Ürün modalı
+  const [productModal, setProductModal] = useState(false);
+  const [productForm, setProductForm] = useState<ProductFormData>(defaultProductForm());
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
+
+  // Silme onay
+  const [deleteConfirm, setDeleteConfirm] = useState<{ type: 'room' | 'product'; id: string } | null>(null);
+
+  // Arama
   const [search, setSearch] = useState('');
-  const [filterCat, setFilterCat] = useState('');
-  const [showModal, setShowModal] = useState(false);
-  const [editId, setEditId] = useState<string | null>(null);
-  const [form, setForm] = useState<ProductFormData>(emptyForm);
-  const [adjustId, setAdjustId] = useState<string | null>(null);
-  const [adjustQty, setAdjustQty] = useState('');
-  const [filterCritical, setFilterCritical] = useState(false);
 
-  const products = useMemo(() => {
-    let list = state.products;
-    if (search) list = list.filter(p => p.name.toLowerCase().includes(search.toLowerCase()) || p.barcode.includes(search));
-    if (filterCat) list = list.filter(p => p.category === filterCat);
-    if (filterCritical) list = list.filter(p => p.stock <= p.criticalStock);
-    return list;
-  }, [state.products, search, filterCat, filterCritical]);
+  // ---- Oda işlemleri ----
+  const openAddRoom = () => { setRoomForm(defaultRoomForm()); setEditingRoomId(null); setRoomModal(true); };
+  const openEditRoom = (r: Room) => { setRoomForm({ name: r.name }); setEditingRoomId(r.id); setRoomModal(true); };
+  const saveRoom = () => {
+    if (!roomForm.name.trim()) return;
+    if (editingRoomId) updateRoom(editingRoomId, { name: roomForm.name });
+    else { addRoom({ name: roomForm.name }); }
+    setRoomModal(false);
+  };
 
-  const categories = useMemo(() => {
-    const cats = new Set(state.products.map(p => p.category).filter(Boolean));
-    return [...CATEGORIES.filter(c => cats.has(c)), ...Array.from(cats).filter(c => !CATEGORIES.includes(c))];
-  }, [state.products]);
+  // ---- Ürün işlemleri ----
+  const openAddProduct = (roomId: string) => { setProductForm(defaultProductForm(roomId)); setEditingProductId(null); setProductModal(true); };
+  const openEditProduct = (p: Product) => { setProductForm({ roomId: p.roomId, barkod: p.barkod, tur: p.tur, name: p.name, fiyat: p.fiyat }); setEditingProductId(p.id); setProductModal(true); };
+  const saveProduct = () => {
+    if (!productForm.name.trim()) return;
+    if (editingProductId) updateProduct(editingProductId, { ...productForm });
+    else addProduct({ ...productForm });
+    setProductModal(false);
+  };
 
-  function openAdd() {
-    setForm(emptyForm);
-    setEditId(null);
-    setShowModal(true);
-  }
+  // ---- Silme ----
+  const confirmDelete = () => {
+    if (!deleteConfirm) return;
+    if (deleteConfirm.type === 'room') deleteRoom(deleteConfirm.id);
+    else deleteProduct(deleteConfirm.id);
+    setDeleteConfirm(null);
+  };
 
-  function openEdit(p: Product) {
-    setForm({
-      name: p.name, barcode: p.barcode, category: p.category,
-      purchasePrice: String(p.purchasePrice), salePrice: String(p.salePrice),
-      vatRate: String(p.vatRate), stock: String(p.stock), criticalStock: String(p.criticalStock),
-    });
-    setEditId(p.id);
-    setShowModal(true);
-  }
+  // ---- Filtrelenmiş ürünler ----
+  const filterProducts = (roomId: string) => {
+    const q = search.toLowerCase();
+    return products.filter(p => p.roomId === roomId && (
+      !q || p.name.toLowerCase().includes(q) || p.barkod.includes(q) || p.tur.toLowerCase().includes(q)
+    ));
+  };
 
-  function handleSave() {
-    if (!form.name.trim()) return;
-    const data = {
-      name: form.name.trim(),
-      barcode: form.barcode.trim(),
-      category: form.category,
-      purchasePrice: parseFloat(form.purchasePrice) || 0,
-      salePrice: parseFloat(form.salePrice) || 0,
-      vatRate: parseFloat(form.vatRate) || 0,
-      stock: parseInt(form.stock) || 0,
-      criticalStock: parseInt(form.criticalStock) || 0,
-    };
-    if (editId) {
-      updateProduct(editId, data);
-    } else {
-      addProduct(data);
-    }
-    setShowModal(false);
-  }
-
-  function handleAdjust(productId: string, delta: number) {
-    const p = state.products.find(x => x.id === productId);
-    if (!p) return;
-    const newStock = Math.max(0, p.stock + delta);
-    updateProduct(productId, { stock: newStock });
-  }
-
-  function handleAdjustManual() {
-    if (!adjustId) return;
-    const p = state.products.find(x => x.id === adjustId);
-    if (!p) return;
-    const qty = parseInt(adjustQty);
-    if (isNaN(qty)) return;
-    updateProduct(adjustId, { stock: Math.max(0, p.stock + qty) });
-    setAdjustId(null);
-    setAdjustQty('');
-  }
-
-  const criticalCount = state.products.filter(p => p.stock <= p.criticalStock).length;
+  const totalProducts = products.length;
 
   return (
     <div className="page">
+      {/* Başlık */}
       <div className="page-header">
-        <h1 className="page-title">Stok</h1>
-        <button className="btn btn-primary" id="add-product-btn" onClick={openAdd}>
-          <Plus size={16} /> Ekle
+        <div>
+          <h1 className="page-title">Stok Takibi</h1>
+          <div style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)', marginTop: 2 }}>
+            {rooms.length} oda · {totalProducts} ürün
+          </div>
+        </div>
+        <button id="btn-add-room" className="btn btn-primary" onClick={openAddRoom}>
+          <Home size={16} /> Oda Ekle
         </button>
       </div>
 
-      {/* Search */}
-      <div className="search-bar">
-        <Search size={16} />
+      {/* Arama */}
+      <div className="search-bar" style={{ marginBottom: 16 }}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
         <input
-          id="stock-search"
           className="search-input"
-          placeholder="Ürün adı veya barkod ara..."
+          placeholder="Barkod veya ürün adı ara..."
           value={search}
           onChange={e => setSearch(e.target.value)}
         />
       </div>
 
-      {/* Filters */}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-        <button
-          id="filter-critical-btn"
-          className={`btn btn-ghost ${filterCritical ? 'btn-warning' : ''}`}
-          style={{ padding: '6px 12px', fontSize: '0.75rem', gap: 4, ...(filterCritical ? { background: 'rgba(245,158,11,0.15)', color: 'var(--color-warning)', borderColor: 'rgba(245,158,11,0.3)' } : {}) }}
-          onClick={() => setFilterCritical(f => !f)}
-        >
-          <Filter size={12} />
-          Kritik ({criticalCount})
-        </button>
-        <select
-          id="category-filter"
-          className="form-select"
-          style={{ padding: '6px 32px 6px 10px', fontSize: '0.75rem', flex: '1', minWidth: 100, maxWidth: 160 }}
-          value={filterCat}
-          onChange={e => setFilterCat(e.target.value)}
-        >
-          <option value="">Tüm Kategoriler</option>
-          {categories.map(c => <option key={c} value={c}>{c}</option>)}
-        </select>
-      </div>
-
-      {/* Product List */}
-      {products.length === 0 ? (
+      {/* Odalar */}
+      {rooms.length === 0 ? (
         <div className="empty-state">
-          <Package size={48} />
-          <p>Ürün bulunamadı</p>
-          <button className="btn btn-primary" onClick={openAdd} style={{ marginTop: 12 }}>
-            <Plus size={16} /> İlk Ürünü Ekle
-          </button>
+          <Home size={48} />
+          <p>Henüz oda eklenmedi</p>
+          <button className="btn btn-primary" onClick={openAddRoom}>İlk Odayı Ekle</button>
         </div>
       ) : (
-        products.map(p => {
-          const stockPct = Math.min(100, p.criticalStock > 0 ? (p.stock / (p.criticalStock * 4)) * 100 : 100);
-          const isCritical = p.stock <= p.criticalStock;
-          const isSoldOut = p.stock === 0;
-
+        rooms.map(room => {
+          const roomProducts = filterProducts(room.id);
+          const isOpen = openRooms[room.id] !== false; // varsayılan açık
           return (
-            <div key={p.id} className="list-item">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>{p.name}</span>
-                    {isSoldOut && <span className="badge badge-danger">Tükendi</span>}
-                    {!isSoldOut && isCritical && <span className="badge badge-warning">Kritik</span>}
+            <div key={room.id} style={{ marginBottom: 12 }}>
+              {/* Oda başlığı */}
+              <div style={{
+                background: 'linear-gradient(135deg, #1e1e35 0%, #1a1a2e 100%)',
+                border: '1px solid var(--color-border)',
+                borderRadius: isOpen ? '16px 16px 0 0' : 16,
+                padding: '12px 16px',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                cursor: 'pointer',
+              }} onClick={() => toggleRoom(room.id)}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{
+                    width: 32, height: 32, borderRadius: 10,
+                    background: 'linear-gradient(135deg, rgba(99,102,241,0.3), rgba(79,70,229,0.3))',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    <Home size={16} color="var(--color-primary-light)" />
                   </div>
-                  {p.barcode && <div className="text-dim" style={{ fontSize: '0.7rem', marginTop: 2 }}>#{p.barcode}</div>}
-                  {p.category && <span className="badge badge-primary" style={{ marginTop: 4, fontSize: '0.65rem' }}>{p.category}</span>}
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>{room.name}</div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--color-text-dim)' }}>
+                      {products.filter(p => p.roomId === room.id).length} ürün
+                    </div>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                  <button className="btn btn-ghost btn-icon" id={`edit-product-${p.id}`} onClick={() => openEdit(p)} title="Düzenle">
-                    <Edit2 size={14} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <button className="btn btn-ghost btn-icon" onClick={e => { e.stopPropagation(); openEditRoom(room); }} title="Düzenle">
+                    <Pencil size={14} />
                   </button>
-                  <button className="btn btn-ghost btn-icon" id={`delete-product-${p.id}`} onClick={() => { if(confirm('Silmek istiyor musunuz?')) deleteProduct(p.id); }} title="Sil" style={{ color: 'var(--color-danger)' }}>
+                  <button className="btn btn-ghost btn-icon" style={{ color: 'var(--color-danger)' }} onClick={e => { e.stopPropagation(); setDeleteConfirm({ type: 'room', id: room.id }); }} title="Sil">
                     <Trash2 size={14} />
                   </button>
+                  {isOpen ? <ChevronUp size={16} color="var(--color-text-dim)" /> : <ChevronDown size={16} color="var(--color-text-dim)" />}
                 </div>
               </div>
 
-              <div className="divider" style={{ margin: '10px 0' }} />
+              {/* Oda içeriği */}
+              {isOpen && (
+                <div style={{
+                  background: 'var(--color-surface)',
+                  border: '1px solid var(--color-border)',
+                  borderTop: 'none',
+                  borderRadius: '0 0 16px 16px',
+                  overflow: 'hidden',
+                }}>
+                  {/* Tablo başlıkları */}
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: '80px 80px 1fr 90px 64px',
+                    gap: 8, padding: '8px 14px',
+                    background: 'var(--color-surface-3)',
+                    borderBottom: '1px solid var(--color-border)',
+                  }}>
+                    {['Barkod', 'Tür', 'Ürün Adı', 'Fiyat', ''].map((h, i) => (
+                      <div key={i} style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--color-text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</div>
+                    ))}
+                  </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--color-text-dim)', marginBottom: 2 }}>Alış</div>
-                  <div style={{ fontWeight: 600, fontSize: '0.8rem' }}>{formatCurrency(p.purchasePrice)}</div>
-                </div>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--color-text-dim)', marginBottom: 2 }}>Satış</div>
-                  <div style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--color-success)' }}>{formatCurrency(p.salePrice)}</div>
-                </div>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: '0.7rem', color: 'var(--color-text-dim)', marginBottom: 2 }}>Kâr</div>
-                  <div style={{ fontWeight: 600, fontSize: '0.8rem', color: 'var(--color-primary-light)' }}>{formatCurrency(p.salePrice - p.purchasePrice)}</div>
-                </div>
-              </div>
+                  {/* Ürün satırları */}
+                  {roomProducts.length === 0 ? (
+                    <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--color-text-dim)', fontSize: '0.85rem' }}>
+                      {search ? 'Arama sonucu bulunamadı' : 'Bu odada ürün yok'}
+                    </div>
+                  ) : (
+                    roomProducts.map((product, idx) => (
+                      <div key={product.id} style={{
+                        display: 'grid',
+                        gridTemplateColumns: '80px 80px 1fr 90px 64px',
+                        gap: 8, padding: '10px 14px',
+                        borderBottom: idx < roomProducts.length - 1 ? '1px solid rgba(99,102,241,0.08)' : 'none',
+                        alignItems: 'center',
+                        transition: 'background 0.15s',
+                      }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(99,102,241,0.05)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        <div style={{ fontFamily: 'monospace', fontSize: '0.8rem', color: 'var(--color-text-muted)', fontWeight: 600 }}>
+                          {product.barkod || '—'}
+                        </div>
+                        <div>
+                          <span className={`badge ${TUR_COLORS[product.tur]}`} style={{ fontSize: '0.65rem' }}>
+                            {product.tur}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '0.88rem', fontWeight: 500 }}>{product.name}</div>
+                        <div style={{ fontSize: '0.88rem', color: product.fiyat ? 'var(--color-success)' : 'var(--color-text-dim)', fontWeight: 600 }}>
+                          {product.fiyat ? `${product.fiyat} ₺` : '—'}
+                        </div>
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <button className="btn btn-ghost btn-icon" style={{ width: 28, height: 28, borderRadius: 8 }} onClick={() => openEditProduct(product)}>
+                            <Pencil size={12} />
+                          </button>
+                          <button className="btn btn-ghost btn-icon" style={{ width: 28, height: 28, borderRadius: 8, color: 'var(--color-danger)' }} onClick={() => setDeleteConfirm({ type: 'product', id: product.id })}>
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
 
-              {/* Stock bar */}
-              <div style={{ marginTop: 12 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                    Stok: <strong style={{ color: isCritical ? 'var(--color-warning)' : 'var(--color-text)' }}>{p.stock}</strong> adet
-                    <span className="text-dim"> / Eşik: {p.criticalStock}</span>
-                  </span>
-                  <span style={{ fontSize: '0.7rem', color: 'var(--color-text-dim)' }}>KDV %{p.vatRate}</span>
+                  {/* Ürün ekle butonu */}
+                  <div style={{ padding: '10px 14px', borderTop: '1px solid var(--color-border)' }}>
+                    <button
+                      id={`btn-add-product-${room.id}`}
+                      className="btn btn-ghost"
+                      style={{ width: '100%', fontSize: '0.8rem', gap: 6, justifyContent: 'center' }}
+                      onClick={() => openAddProduct(room.id)}
+                    >
+                      <Plus size={14} /> Bu Odaya Mal Ekle
+                    </button>
+                  </div>
                 </div>
-                <div className="stock-bar">
-                  <div className="stock-bar-fill" style={{
-                    width: `${stockPct}%`,
-                    background: isSoldOut ? 'var(--color-danger)' : isCritical ? 'var(--color-warning)' : 'var(--color-success)'
-                  }} />
-                </div>
-              </div>
-
-              {/* Stock adjust */}
-              <div style={{ display: 'flex', gap: 6, marginTop: 10, alignItems: 'center' }}>
-                <button className="btn btn-ghost btn-icon" id={`stock-down-${p.id}`} onClick={() => handleAdjust(p.id, -1)} title="-1">
-                  <ChevronDown size={16} />
-                </button>
-                <button className="btn btn-ghost btn-icon" id={`stock-up-${p.id}`} onClick={() => handleAdjust(p.id, 1)} title="+1">
-                  <ChevronUp size={16} />
-                </button>
-                {adjustId === p.id ? (
-                  <>
-                    <input
-                      type="number"
-                      className="form-input"
-                      style={{ padding: '6px 10px', width: 80, fontSize: '0.8rem' }}
-                      placeholder="±adet"
-                      value={adjustQty}
-                      onChange={e => setAdjustQty(e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && handleAdjustManual()}
-                      autoFocus
-                    />
-                    <button className="btn btn-success" style={{ padding: '6px 12px', fontSize: '0.8rem' }} onClick={handleAdjustManual}>Uygula</button>
-                    <button className="btn btn-ghost" style={{ padding: '6px 10px', fontSize: '0.8rem' }} onClick={() => { setAdjustId(null); setAdjustQty(''); }}>İptal</button>
-                  </>
-                ) : (
-                  <button
-                    className="btn btn-ghost"
-                    id={`stock-adjust-${p.id}`}
-                    style={{ padding: '6px 12px', fontSize: '0.75rem' }}
-                    onClick={() => setAdjustId(p.id)}
-                  >
-                    Manuel Giriş
-                  </button>
-                )}
-              </div>
+              )}
             </div>
           );
         })
       )}
 
-      {/* Add/Edit Modal */}
-      {showModal && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowModal(false)}>
-          <div className="modal">
+      {/* ODA MODALI */}
+      {roomModal && (
+        <div className="modal-overlay" onClick={() => setRoomModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <span className="modal-title">{editId ? 'Ürün Düzenle' : 'Yeni Ürün'}</span>
-              <button className="btn btn-ghost btn-icon" onClick={() => setShowModal(false)}><X size={18} /></button>
+              <h3 className="modal-title">{editingRoomId ? 'Odayı Düzenle' : 'Yeni Oda Ekle'}</h3>
+              <button className="btn btn-ghost btn-icon" onClick={() => setRoomModal(false)}><X size={18} /></button>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div className="form-group" style={{ marginBottom: 20 }}>
+              <label className="form-label">Oda / Bölge Adı</label>
+              <input className="form-input" placeholder="örn. Dükkan-Sol, Depo-Oda1" value={roomForm.name} onChange={e => setRoomForm({ name: e.target.value })} autoFocus />
+            </div>
+            <button className="btn btn-primary btn-full btn-lg" onClick={saveRoom}>
+              {editingRoomId ? 'Güncelle' : 'Oda Ekle'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ÜRÜN MODALI */}
+      {productModal && (
+        <div className="modal-overlay" onClick={() => setProductModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3 className="modal-title">{editingProductId ? 'Malı Düzenle' : 'Yeni Mal Ekle'}</h3>
+              <button className="btn btn-ghost btn-icon" onClick={() => setProductModal(false)}><X size={18} /></button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {/* Oda seçimi */}
               <div className="form-group">
-                <label className="form-label">Ürün Adı *</label>
-                <input id="product-name" className="form-input" placeholder="Ürün adı" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+                <label className="form-label">Oda</label>
+                <select className="form-select" value={productForm.roomId} onChange={e => setProductForm(f => ({ ...f, roomId: e.target.value }))}>
+                  {rooms.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                </select>
               </div>
               <div className="grid-2">
                 <div className="form-group">
                   <label className="form-label">Barkod</label>
-                  <input id="product-barcode" className="form-input" placeholder="Barkod" value={form.barcode} onChange={e => setForm(f => ({ ...f, barcode: e.target.value }))} />
+                  <input className="form-input" placeholder="örn. 1004" value={productForm.barkod} onChange={e => setProductForm(f => ({ ...f, barkod: e.target.value }))} />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Kategori</label>
-                  <select id="product-category" className="form-select" value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
-                    <option value="">Seçiniz</option>
-                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  <label className="form-label">Tür</label>
+                  <select className="form-select" value={productForm.tur} onChange={e => setProductForm(f => ({ ...f, tur: e.target.value as ProductTur }))}>
+                    {TUR_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </div>
               </div>
-              <div className="grid-2">
-                <div className="form-group">
-                  <label className="form-label">Alış Fiyatı (₺)</label>
-                  <input id="product-purchase-price" type="number" className="form-input" placeholder="0,00" value={form.purchasePrice} onChange={e => setForm(f => ({ ...f, purchasePrice: e.target.value }))} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Satış Fiyatı (₺)</label>
-                  <input id="product-sale-price" type="number" className="form-input" placeholder="0,00" value={form.salePrice} onChange={e => setForm(f => ({ ...f, salePrice: e.target.value }))} />
-                </div>
+              <div className="form-group">
+                <label className="form-label">Ürün Adı</label>
+                <input className="form-input" placeholder="örn. Dalgıç Şardon Battal Düz Paça" value={productForm.name} onChange={e => setProductForm(f => ({ ...f, name: e.target.value }))} autoFocus />
               </div>
-              <div className="grid-3">
-                <div className="form-group">
-                  <label className="form-label">KDV (%)</label>
-                  <select id="product-vat" className="form-select" value={form.vatRate} onChange={e => setForm(f => ({ ...f, vatRate: e.target.value }))}>
-                    <option value="0">%0</option>
-                    <option value="1">%1</option>
-                    <option value="8">%8</option>
-                    <option value="10">%10</option>
-                    <option value="20">%20</option>
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Stok Miktarı</label>
-                  <input id="product-stock" type="number" className="form-input" placeholder="0" value={form.stock} onChange={e => setForm(f => ({ ...f, stock: e.target.value }))} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Kritik Eşik</label>
-                  <input id="product-critical" type="number" className="form-input" placeholder="5" value={form.criticalStock} onChange={e => setForm(f => ({ ...f, criticalStock: e.target.value }))} />
-                </div>
+              <div className="form-group">
+                <label className="form-label">Fiyat (₺)</label>
+                <input className="form-input" placeholder="örn. 260 veya 225-230" value={productForm.fiyat} onChange={e => setProductForm(f => ({ ...f, fiyat: e.target.value }))} />
               </div>
-              <div className="grid-2" style={{ marginTop: 4 }}>
-                <button className="btn btn-ghost btn-full" onClick={() => setShowModal(false)}>İptal</button>
-                <button id="save-product-btn" className="btn btn-primary btn-full" onClick={handleSave}>
-                  {editId ? 'Güncelle' : 'Kaydet'}
-                </button>
-              </div>
+              <button className="btn btn-primary btn-full btn-lg" onClick={saveProduct}>
+                {editingProductId ? 'Güncelle' : 'Mal Ekle'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SİLME ONAY MODALI */}
+      {deleteConfirm && (
+        <div className="modal-overlay" onClick={() => setDeleteConfirm(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 380 }}>
+            <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: 8, marginTop: 0 }}>
+              {deleteConfirm.type === 'room' ? 'Odayı Sil' : 'Malı Sil'}
+            </h3>
+            <p style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: 20 }}>
+              {deleteConfirm.type === 'room'
+                ? 'Bu odayı ve içindeki TÜM malları silmek istediğinizden emin misiniz?'
+                : 'Bu malı silmek istediğinizden emin misiniz?'}
+            </p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => setDeleteConfirm(null)}>İptal</button>
+              <button className="btn btn-danger" style={{ flex: 1 }} onClick={confirmDelete}>Evet, Sil</button>
             </div>
           </div>
         </div>
