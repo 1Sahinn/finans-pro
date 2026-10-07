@@ -1,11 +1,13 @@
 import { useState } from 'react';
-import { LayoutDashboard, Package, Wallet, Users, ShoppingCart } from 'lucide-react';
+import { LayoutDashboard, Package, Wallet, Users, ShoppingCart, LogOut } from 'lucide-react';
 import { AppProvider } from './context/AppContext';
 import Dashboard from './pages/Dashboard';
 import StockPage from './pages/StockPage';
 import CashPage from './pages/CashPage';
 import CurrentsPage from './pages/CurrentsPage';
 import SalePage from './pages/SalePage';
+import LoginPage from './pages/LoginPage';
+import { getSession, logout, type User } from './auth/users';
 
 type Page = 'dashboard' | 'stock' | 'cash' | 'currents' | 'sale';
 
@@ -17,7 +19,7 @@ const navItems: { id: Page; label: string; icon: typeof LayoutDashboard }[] = [
   { id: 'currents', label: 'Cariler', icon: Users },
 ];
 
-function AppShell() {
+function AppShell({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [page, setPage] = useState<Page>('dashboard');
 
   const renderPage = () => {
@@ -64,14 +66,28 @@ function AppShell() {
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {/* Kullanıcı adı */}
             <div style={{
               padding: '4px 10px', borderRadius: 100,
-              background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.2)',
-              fontSize: '0.65rem', fontWeight: 700, color: 'var(--color-success)',
-              letterSpacing: '0.04em',
+              background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)',
+              fontSize: '0.65rem', fontWeight: 700, color: 'var(--color-primary-light)',
             }}>
-              PWA ✓
+              👤 {user.displayName}
             </div>
+            {/* Çıkış butonu */}
+            <button
+              id="btn-logout"
+              onClick={onLogout}
+              title="Çıkış Yap"
+              style={{
+                background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)',
+                borderRadius: 100, padding: '5px 8px', cursor: 'pointer',
+                color: '#f87171', display: 'flex', alignItems: 'center', gap: 4,
+                fontSize: '0.65rem', fontWeight: 700,
+              }}
+            >
+              <LogOut size={12} />
+            </button>
           </div>
         </div>
       </div>
@@ -121,9 +137,23 @@ function AppShell() {
 }
 
 export default function App() {
+  const [user, setUser] = useState<User | null>(() => getSession());
+
+  const handleLogin = (u: User) => setUser(u);
+
+  const handleLogout = () => {
+    logout();
+    setUser(null);
+  };
+
+  if (!user) {
+    return <LoginPage onLogin={handleLogin} />;
+  }
+
   return (
     <AppProvider>
-      <AppShell />
+      <AppShell user={user} onLogout={handleLogout} />
     </AppProvider>
   );
 }
+
